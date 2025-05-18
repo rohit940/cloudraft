@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-app
+  labels:
+    app: metrics-app
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: metrics-app
+  template:
+    metadata:
+      labels:
+        app: metrics-app
+    spec:
+      containers:
+        - name: metrics-app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Patching app.py..."
+              sed -i \
+                -e '/@app.route.*\/counter/{n;s/async def/def/}' \
+                -e 's/await\s\+metrics/metrics/' \
+                /app/app.py
+              echo "Starting app..."
+              exec python /app/app.py
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: metrics-app-secret
+                  key: PASSWORD
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
